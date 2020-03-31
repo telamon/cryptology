@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+
+// Messages belonging to the toy poll system.
+message PollMessage {
+  oneof msg {
+    PollChallenge challenge = 1;
+    PollBallot ballot = 2;
+  }
+}
+message PollChallenge {
+  required bytes box_pk = 1;
+  string motion = 2;
+  repeated string options = 3;
+  uint64 ends_at = 4;
+}
+message PollBallot {
+  required bytes box_msg = 1;
+  required bytes secret_vote = 2;
+  required bytes box_pk = 3;
+}
+message PollStatement {
+  required bytes vote = 1;
+  required bytes secret_proof = 2;
+}

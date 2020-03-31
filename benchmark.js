@@ -20,4 +20,3 @@ for (const p of puzzles) {
 console.log('avg:', sum / puzzles.length)
 console.log('min:', min)
 console.log('max:', max)
-

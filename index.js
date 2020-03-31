@@ -1,40 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 const sodium = require('sodium-universal')
-const Util =  {
-  ENCRYPTION_KEYSIZE: sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
+const PicoFeed = require('picofeed')
 
-  // If i remember correctly this is sodium.secretbox encryption
-  // that uses a single secret key for both encryption/decryption & auth
+const Util = {
   encrypt (data, encryptionKey, encode) {
     if (typeof encode === 'function') {
       data = encode(data)
     }
     if (!Buffer.isBuffer(data)) data = Buffer.from(data, 'utf-8')
-
-    // Generate public nonce
-    const nonceLen = sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
-    const nonce = Buffer.alloc(nonceLen)
-    sodium.randombytes_buf(nonce, nonceLen)
-
-    // Allocate buffer for the encrypted result.
-    const encLen = data.length + sodium.crypto_aead_xchacha20poly1305_ietf_ABYTES + nonceLen
-    const encrypted = Buffer.alloc(encLen)
-
-    // Insert the public nonce into the encrypted-message buffer at pos 0
-    nonce.copy(encrypted)
-
-    // Encrypt
-    const n = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-      encrypted.slice(nonceLen),
-      data,
-      null, // ADDITIONAL_DATA
-      null, // always null according to sodium-native docs
-      nonce,
-      encryptionKey
-    )
-
-    if (n !== encLen - nonceLen) throw new Error(`Encryption error, expected encrypted bytes (${n}) to equal (${encLen - nonceLen}).`)
-    return encrypted
+    const o = Buffer.allocUnsafe(sodium.crypto_secretbox_NONCEBYTES +
+      sodium.crypto_secretbox_MACBYTES + data.length)
+    const nonce = o.slice(0, sodium.crypto_secretbox_NONCEBYTES)
+    sodium.randombytes_buf(nonce)
+    sodium.crypto_secretbox_easy(
+      o.slice(sodium.crypto_secretbox_NONCEBYTES),
+      data, nonce, encryptionKey)
+    return o
   },
 
   deriveSubkey (master, n, context = '__undef__', id = 0) {
@@ -83,24 +64,17 @@ const Util =  {
   },
 
   decrypt (buffer, encryptionKey, decode) {
-    const nonceLen = sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
-    const nonce = buffer.slice(0, nonceLen) // First part of the buffer
-    const encrypted = buffer.slice(nonceLen) // Last part of the buffer
-
-    const messageLen = buffer.length - sodium.crypto_aead_xchacha20poly1305_ietf_ABYTES - nonceLen
-    const message = Buffer.alloc(messageLen)
-
-    const n = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+    const message = Buffer.allocUnsafe(buffer.length -
+      sodium.crypto_secretbox_MACBYTES -
+      sodium.crypto_secretbox_MACBYTES)
+    const nonce = buffer.slice(0, sodium.crypto_secretbox_NONCEBYTES)
+    const success = sodium.crypto_secretbox_open_easy(
       message,
-      null, // always null
-      encrypted,
-      null, // ADDITIONAL_DATA
+      buffer.slice(sodium.crypto_secretbox_NONCEBYTES),
       nonce,
-      encryptionKey
-    )
+      encryptionKey)
 
-    if (n !== messageLen) throw new Error(`Decryption error, expected decrypted bytes (${n}) to equal expected message length (${messageLen}).`)
-
+    if (!success) throw new Error('DecryptionFailedError')
     // Run originally provided encoder if any
     if (typeof decode === 'function') return decode(message, 0, message.length)
     return message
@@ -215,7 +189,28 @@ const Util =  {
   },
   puzzleOpen (comb, key) {
     return Util.puzzleBreak(comb, undefined, key)
+  },
+
+  box (to, from, m) {
+    const o = Buffer.allocUnsafe(sodium.crypto_box_MACBYTES +
+      sodium.crypto_box_NONCEBYTES +
+      m.length)
+    const n = o.subarray(0, sodium.crypto_box_NONCEBYTES)
+    sodium.randombytes_buf(n)
+    const c = o.subarray(sodium.crypto_box_NONCEBYTES)
+    sodium.crypto_box_easy(c, m, n, to, from)
+    return o
+  },
+  unbox (from, to, c) {
+    const m = Buffer.allocUnsafe(c.lenght -
+      sodium.crypto_box_MACBYTES -
+      sodium.crypto_box_NONCEBYTES)
+    const n = c.subarray(0, sodium.crypto_box_NONCEBYTES)
+    const succ = sodium.crypto_box_open_easy(m, c, n, from, to)
+    if (!succ) throw new Error('DecryptionFailedError')
+    return m
   }
+
 }
 module.exports = Util
 
@@ -237,3 +232,47 @@ module.exports.Identity = class HyperIdentity {
   }
 }
 
+// Not sure if this is a poll or a void cache, time will tell.
+const { PollMessage } = require('./messages.js')
+module.exports.Poll = class VoidCache extends PicoFeed {
+  static get CHALLENGE_IDX () { return 0 }
+  static get BALLOT_IDX () { return 1 }
+  constructor (buf, opts) {
+    super(buf, { ...opts, contentEncoding: PollMessage })
+  }
+
+  setChallenge (pkey, { motion, options, endsAt }) {
+    const msg = {
+      challenge: {
+        box_pk: pkey,
+        motion,
+        options,
+        ends_at: endsAt || new Date().getTime() + 86400000
+      }
+    }
+    this.append(msg) // TODO: Should be this.set(0, msg)
+  }
+
+  get challenge () {
+    return this.get(VoidCache.CHALLENGE_IDX).challenge
+  }
+
+  get ballot () {
+    return this.get(VoidCache.BALLOT_IDX).ballot
+  }
+
+  vote (ident, vote) {
+    const b0 = Buffer.alloc(sodium.crypto_secretbox_KEYBYTES)
+    sodium.randombytes_buf(b0)
+    const msg = {
+      ballot: {
+        box_pk: ident.box.pub,
+        secret_vote: Util.encrypt(vote, b0),
+        box_msg: Util.box(this.challenge.box_pk, ident.box.sec, b0)
+      }
+    }
+    // TODO: this.trunc(1) // overwrite existing ballots.
+    this.append(msg, ident.sig.sec)
+    return b0
+  }
+}
