@@ -3,28 +3,13 @@ const sodium = require('sodium-universal')
 const PicoFeed = require('picofeed')
 
 const Util = {
-  encrypt (data, encryptionKey, encode) {
-    if (typeof encode === 'function') {
-      data = encode(data)
-    }
-    if (!Buffer.isBuffer(data)) data = Buffer.from(data, 'utf-8')
-    const o = Buffer.allocUnsafe(sodium.crypto_secretbox_NONCEBYTES +
-      sodium.crypto_secretbox_MACBYTES + data.length)
-    const nonce = o.slice(0, sodium.crypto_secretbox_NONCEBYTES)
-    sodium.randombytes_buf(nonce)
-    sodium.crypto_secretbox_easy(
-      o.slice(sodium.crypto_secretbox_NONCEBYTES),
-      data, nonce, encryptionKey)
-    return o
-  },
-
   deriveSubkey (master, n, context = '__undef__', id = 0) {
     if (!Buffer.isBuffer(context)) context = Buffer.from(context)
     const sub = Buffer.alloc(n)
     sodium.crypto_kdf_derive_from_key(
       sub,
       id,
-      context.slice(0, sodium.crypto_kdf_CONTEXTBYTES),
+      context.subarray(0, sodium.crypto_kdf_CONTEXTBYTES),
       master
     )
     return sub
@@ -63,14 +48,34 @@ const Util = {
     return { pub, sec }
   },
 
+  encrypt (data, encryptionKey, encode) {
+    if (typeof encode === 'function') {
+      data = encode(data)
+    }
+    if (!Buffer.isBuffer(data)) data = Buffer.from(data, 'utf-8')
+
+    const o = Buffer.allocUnsafe(data.length +
+      sodium.crypto_secretbox_NONCEBYTES +
+      sodium.crypto_secretbox_MACBYTES)
+
+    const nonce = o.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
+    sodium.randombytes_buf(nonce)
+
+    sodium.crypto_secretbox_easy(
+      o.subarray(sodium.crypto_secretbox_NONCEBYTES),
+      data, nonce, encryptionKey)
+    return o
+  },
+
   decrypt (buffer, encryptionKey, decode) {
     const message = Buffer.allocUnsafe(buffer.length -
       sodium.crypto_secretbox_MACBYTES -
-      sodium.crypto_secretbox_MACBYTES)
-    const nonce = buffer.slice(0, sodium.crypto_secretbox_NONCEBYTES)
+      sodium.crypto_secretbox_NONCEBYTES)
+
+    const nonce = buffer.subarray(0, sodium.crypto_secretbox_NONCEBYTES)
     const success = sodium.crypto_secretbox_open_easy(
       message,
-      buffer.slice(sodium.crypto_secretbox_NONCEBYTES),
+      buffer.subarray(sodium.crypto_secretbox_NONCEBYTES),
       nonce,
       encryptionKey)
 
@@ -202,15 +207,14 @@ const Util = {
     return o
   },
   unbox (from, to, c) {
-    const m = Buffer.allocUnsafe(c.lenght -
+    const m = Buffer.allocUnsafe(c.length -
       sodium.crypto_box_MACBYTES -
       sodium.crypto_box_NONCEBYTES)
     const n = c.subarray(0, sodium.crypto_box_NONCEBYTES)
-    const succ = sodium.crypto_box_open_easy(m, c, n, from, to)
+    const succ = sodium.crypto_box_open_easy(m, c.subarray(sodium.crypto_box_NONCEBYTES), n, from, to)
     if (!succ) throw new Error('DecryptionFailedError')
     return m
   }
-
 }
 module.exports = Util
 
@@ -233,15 +237,15 @@ module.exports.Identity = class HyperIdentity {
 }
 
 // Not sure if this is a poll or a void cache, time will tell.
-const { PollMessage } = require('./messages.js')
-module.exports.Poll = class VoidCache extends PicoFeed {
+const { PollMessage, PollStatement } = require('./messages.js')
+module.exports.Poll = class Poll extends PicoFeed {
   static get CHALLENGE_IDX () { return 0 }
   static get BALLOT_IDX () { return 1 }
   constructor (buf, opts) {
     super(buf, { ...opts, contentEncoding: PollMessage })
   }
 
-  setChallenge (pkey, { motion, options, endsAt }) {
+  packChallenge (pkey, { motion, options, endsAt }) {
     const msg = {
       challenge: {
         box_pk: pkey,
@@ -254,14 +258,15 @@ module.exports.Poll = class VoidCache extends PicoFeed {
   }
 
   get challenge () {
-    return this.get(VoidCache.CHALLENGE_IDX).challenge
+    return this.get(Poll.CHALLENGE_IDX).challenge
   }
 
   get ballot () {
-    return this.get(VoidCache.BALLOT_IDX).ballot
+    return this.get(Poll.BALLOT_IDX).ballot
   }
 
-  vote (ident, vote) {
+  packVote (ident, vote, append = false) {
+    if (!Buffer.isBuffer(vote)) throw new Error('vote must be a buffer')
     const b0 = Buffer.alloc(sodium.crypto_secretbox_KEYBYTES)
     sodium.randombytes_buf(b0)
     const msg = {
@@ -271,8 +276,39 @@ module.exports.Poll = class VoidCache extends PicoFeed {
         box_msg: Util.box(this.challenge.box_pk, ident.box.sec, b0)
       }
     }
-    // TODO: this.trunc(1) // overwrite existing ballots.
+
+    // Sanity check. Don't want to accidentally litter the world with undecryptable messages.
+    const safetyUnpack = Util.decrypt(msg.ballot.secret_vote, b0)
+    if (!vote.equals(safetyUnpack)) {
+      console.log(`Expected: (${vote.length})`, vote.toString(),
+        `\nto equal: (${safetyUnpack.length})`, safetyUnpack.toString())
+      throw new Error('Internal error, encryption failed')
+    }
+
+    if (!append) this.truncateAfter(Poll.CHALLENGE_IDX)
+    if (this.length !== 1) throw new Error('invalid length after truncation')
     this.append(msg, ident.sig.sec)
     return b0
   }
+
+  unboxBallot (wboxs) {
+    const blt = this.ballot
+    return Util.unbox(blt.box_pk, wboxs, blt.box_msg)
+  }
+
+  _decryptVote (secret) {
+    return Util.decrypt(this.ballot.secret_vote, secret)
+  }
+
+  toStatement (wboxs) {
+    const b0 = this.unboxBallot(wboxs)
+    const stmt = {
+      vote: this._decryptVote(b0),
+      proof: Util.box(this.ballot.box_pk, wboxs, b0)
+    }
+    return PollStatement.encode(stmt)
+  }
 }
+
+// Export for external use.
+module.exports.Poll.Statement = PollStatement

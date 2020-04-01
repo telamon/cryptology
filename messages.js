@@ -324,8 +324,8 @@ function definePollStatement () {
     if (!defined(obj.vote)) throw new Error("vote is required")
     var len = encodings.bytes.encodingLength(obj.vote)
     length += 1 + len
-    if (!defined(obj.secret_proof)) throw new Error("secret_proof is required")
-    var len = encodings.bytes.encodingLength(obj.secret_proof)
+    if (!defined(obj.proof)) throw new Error("proof is required")
+    var len = encodings.bytes.encodingLength(obj.proof)
     length += 1 + len
     return length
   }
@@ -338,9 +338,9 @@ function definePollStatement () {
     buf[offset++] = 10
     encodings.bytes.encode(obj.vote, buf, offset)
     offset += encodings.bytes.encode.bytes
-    if (!defined(obj.secret_proof)) throw new Error("secret_proof is required")
+    if (!defined(obj.proof)) throw new Error("proof is required")
     buf[offset++] = 18
-    encodings.bytes.encode(obj.secret_proof, buf, offset)
+    encodings.bytes.encode(obj.proof, buf, offset)
     offset += encodings.bytes.encode.bytes
     encode.bytes = offset - oldOffset
     return buf
@@ -353,7 +353,7 @@ function definePollStatement () {
     var oldOffset = offset
     var obj = {
       vote: null,
-      secret_proof: null
+      proof: null
     }
     var found0 = false
     var found1 = false
@@ -373,7 +373,7 @@ function definePollStatement () {
         found0 = true
         break
         case 2:
-        obj.secret_proof = encodings.bytes.decode(buf, offset)
+        obj.proof = encodings.bytes.decode(buf, offset)
         offset += encodings.bytes.decode.bytes
         found1 = true
         break
