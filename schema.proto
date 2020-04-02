@@ -1,6 +1,17 @@
 syntax = "proto3";
+message VoteMsg {
+  required int32 value = 1;
+  string geo = 2;
+}
 
-
+message IdentityMessage {
+  required Keypair sig = 1;
+  required Keypair box = 2;
+}
+message Keypair {
+  required bytes sk = 1;
+  required bytes pk = 2;
+}
 // Messages belonging to the toy poll system.
 message PollMessage {
   oneof msg {

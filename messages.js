@@ -10,6 +10,27 @@ var encodings = require('protocol-buffers-encodings')
 var varint = encodings.varint
 var skip = encodings.skip
 
+var VoteMsg = exports.VoteMsg = {
+  buffer: true,
+  encodingLength: null,
+  encode: null,
+  decode: null
+}
+
+var IdentityMessage = exports.IdentityMessage = {
+  buffer: true,
+  encodingLength: null,
+  encode: null,
+  decode: null
+}
+
+var Keypair = exports.Keypair = {
+  buffer: true,
+  encodingLength: null,
+  encode: null,
+  decode: null
+}
+
 var PollMessage = exports.PollMessage = {
   buffer: true,
   encodingLength: null,
@@ -38,10 +59,233 @@ var PollStatement = exports.PollStatement = {
   decode: null
 }
 
+defineVoteMsg()
+defineIdentityMessage()
+defineKeypair()
 definePollMessage()
 definePollChallenge()
 definePollBallot()
 definePollStatement()
+
+function defineVoteMsg () {
+  VoteMsg.encodingLength = encodingLength
+  VoteMsg.encode = encode
+  VoteMsg.decode = decode
+
+  function encodingLength (obj) {
+    var length = 0
+    if (!defined(obj.value)) throw new Error("value is required")
+    var len = encodings.int32.encodingLength(obj.value)
+    length += 1 + len
+    if (defined(obj.geo)) {
+      var len = encodings.string.encodingLength(obj.geo)
+      length += 1 + len
+    }
+    return length
+  }
+
+  function encode (obj, buf, offset) {
+    if (!offset) offset = 0
+    if (!buf) buf = Buffer.allocUnsafe(encodingLength(obj))
+    var oldOffset = offset
+    if (!defined(obj.value)) throw new Error("value is required")
+    buf[offset++] = 8
+    encodings.int32.encode(obj.value, buf, offset)
+    offset += encodings.int32.encode.bytes
+    if (defined(obj.geo)) {
+      buf[offset++] = 18
+      encodings.string.encode(obj.geo, buf, offset)
+      offset += encodings.string.encode.bytes
+    }
+    encode.bytes = offset - oldOffset
+    return buf
+  }
+
+  function decode (buf, offset, end) {
+    if (!offset) offset = 0
+    if (!end) end = buf.length
+    if (!(end <= buf.length && offset <= buf.length)) throw new Error("Decoded message is not valid")
+    var oldOffset = offset
+    var obj = {
+      value: 0,
+      geo: ""
+    }
+    var found0 = false
+    while (true) {
+      if (end <= offset) {
+        if (!found0) throw new Error("Decoded message is not valid")
+        decode.bytes = offset - oldOffset
+        return obj
+      }
+      var prefix = varint.decode(buf, offset)
+      offset += varint.decode.bytes
+      var tag = prefix >> 3
+      switch (tag) {
+        case 1:
+        obj.value = encodings.int32.decode(buf, offset)
+        offset += encodings.int32.decode.bytes
+        found0 = true
+        break
+        case 2:
+        obj.geo = encodings.string.decode(buf, offset)
+        offset += encodings.string.decode.bytes
+        break
+        default:
+        offset = skip(prefix & 7, buf, offset)
+      }
+    }
+  }
+}
+
+function defineIdentityMessage () {
+  IdentityMessage.encodingLength = encodingLength
+  IdentityMessage.encode = encode
+  IdentityMessage.decode = decode
+
+  function encodingLength (obj) {
+    var length = 0
+    if (!defined(obj.sig)) throw new Error("sig is required")
+    var len = Keypair.encodingLength(obj.sig)
+    length += varint.encodingLength(len)
+    length += 1 + len
+    if (!defined(obj.box)) throw new Error("box is required")
+    var len = Keypair.encodingLength(obj.box)
+    length += varint.encodingLength(len)
+    length += 1 + len
+    return length
+  }
+
+  function encode (obj, buf, offset) {
+    if (!offset) offset = 0
+    if (!buf) buf = Buffer.allocUnsafe(encodingLength(obj))
+    var oldOffset = offset
+    if (!defined(obj.sig)) throw new Error("sig is required")
+    buf[offset++] = 10
+    varint.encode(Keypair.encodingLength(obj.sig), buf, offset)
+    offset += varint.encode.bytes
+    Keypair.encode(obj.sig, buf, offset)
+    offset += Keypair.encode.bytes
+    if (!defined(obj.box)) throw new Error("box is required")
+    buf[offset++] = 18
+    varint.encode(Keypair.encodingLength(obj.box), buf, offset)
+    offset += varint.encode.bytes
+    Keypair.encode(obj.box, buf, offset)
+    offset += Keypair.encode.bytes
+    encode.bytes = offset - oldOffset
+    return buf
+  }
+
+  function decode (buf, offset, end) {
+    if (!offset) offset = 0
+    if (!end) end = buf.length
+    if (!(end <= buf.length && offset <= buf.length)) throw new Error("Decoded message is not valid")
+    var oldOffset = offset
+    var obj = {
+      sig: null,
+      box: null
+    }
+    var found0 = false
+    var found1 = false
+    while (true) {
+      if (end <= offset) {
+        if (!found0 || !found1) throw new Error("Decoded message is not valid")
+        decode.bytes = offset - oldOffset
+        return obj
+      }
+      var prefix = varint.decode(buf, offset)
+      offset += varint.decode.bytes
+      var tag = prefix >> 3
+      switch (tag) {
+        case 1:
+        var len = varint.decode(buf, offset)
+        offset += varint.decode.bytes
+        obj.sig = Keypair.decode(buf, offset, offset + len)
+        offset += Keypair.decode.bytes
+        found0 = true
+        break
+        case 2:
+        var len = varint.decode(buf, offset)
+        offset += varint.decode.bytes
+        obj.box = Keypair.decode(buf, offset, offset + len)
+        offset += Keypair.decode.bytes
+        found1 = true
+        break
+        default:
+        offset = skip(prefix & 7, buf, offset)
+      }
+    }
+  }
+}
+
+function defineKeypair () {
+  Keypair.encodingLength = encodingLength
+  Keypair.encode = encode
+  Keypair.decode = decode
+
+  function encodingLength (obj) {
+    var length = 0
+    if (!defined(obj.sk)) throw new Error("sk is required")
+    var len = encodings.bytes.encodingLength(obj.sk)
+    length += 1 + len
+    if (!defined(obj.pk)) throw new Error("pk is required")
+    var len = encodings.bytes.encodingLength(obj.pk)
+    length += 1 + len
+    return length
+  }
+
+  function encode (obj, buf, offset) {
+    if (!offset) offset = 0
+    if (!buf) buf = Buffer.allocUnsafe(encodingLength(obj))
+    var oldOffset = offset
+    if (!defined(obj.sk)) throw new Error("sk is required")
+    buf[offset++] = 10
+    encodings.bytes.encode(obj.sk, buf, offset)
+    offset += encodings.bytes.encode.bytes
+    if (!defined(obj.pk)) throw new Error("pk is required")
+    buf[offset++] = 18
+    encodings.bytes.encode(obj.pk, buf, offset)
+    offset += encodings.bytes.encode.bytes
+    encode.bytes = offset - oldOffset
+    return buf
+  }
+
+  function decode (buf, offset, end) {
+    if (!offset) offset = 0
+    if (!end) end = buf.length
+    if (!(end <= buf.length && offset <= buf.length)) throw new Error("Decoded message is not valid")
+    var oldOffset = offset
+    var obj = {
+      sk: null,
+      pk: null
+    }
+    var found0 = false
+    var found1 = false
+    while (true) {
+      if (end <= offset) {
+        if (!found0 || !found1) throw new Error("Decoded message is not valid")
+        decode.bytes = offset - oldOffset
+        return obj
+      }
+      var prefix = varint.decode(buf, offset)
+      offset += varint.decode.bytes
+      var tag = prefix >> 3
+      switch (tag) {
+        case 1:
+        obj.sk = encodings.bytes.decode(buf, offset)
+        offset += encodings.bytes.decode.bytes
+        found0 = true
+        break
+        case 2:
+        obj.pk = encodings.bytes.decode(buf, offset)
+        offset += encodings.bytes.decode.bytes
+        found1 = true
+        break
+        default:
+        offset = skip(prefix & 7, buf, offset)
+      }
+    }
+  }
+}
 
 function definePollMessage () {
   PollMessage.encodingLength = encodingLength

@@ -5,7 +5,7 @@ const {
   puzzleEncrypt,
   puzzleBreak,
   puzzleOpen,
-  unbox
+  decrypt
 } = require('..')
 
 test('summons an decentralized Identity', t => {
@@ -56,7 +56,7 @@ test.only('Decentralized Poll agorithm', t => {
 
   // Witness attempts to open the ballot
   // If b0 is not undefined, it means this ballot was addressed to us.
-  const b0 = wpoll.unboxBallot(W.box.sec)
+  const b0 = wpoll.unboxBallot(W.box.sec, W.box.pub)
   // b0 should equal to alice's receipt
   t.ok(receipt.equals(b0))
 
@@ -65,13 +65,14 @@ test.only('Decentralized Poll agorithm', t => {
 
   // Witness should publish the anonymized statement,
   // preferrably append it to a hypercore
-  const bin = wpoll.toStatement(W.box.sec)
+  const bin = wpoll.toStatement(W.box.sec, W.box.pub)
   t.ok(bin)
 
   // Alice validates that her vote was recorded properly.
   const statement = Poll.Statement.decode(bin)
   t.ok(aVote.equals(statement.vote))
-  t.ok(receipt.equals(unbox(W.box.pub, A.box.sec, statement.proof)))
+  const p = decrypt(statement.proof, receipt)
+  t.ok(A.box.pub.equals(p))
   // If alice's vote was recorded incorrectly,
   // at the cost of anonymity she can publish her receipt/b0
   // to prove that witness misbehaved having ignored her vote or manipulated it.
