@@ -273,17 +273,18 @@ const Util = {
 module.exports = Util
 
 module.exports.Identity = class Identity {
-  constructor () {
+  constructor (keys = {}) {
     this.box = {
-      pub: Buffer.allocUnsafe(sod.crypto_box_PUBLICKEYBYTES),
-      sec: Buffer.allocUnsafe(sod.crypto_box_SECRETKEYBYTES)
+      pub: keys.bpk || Buffer.allocUnsafe(sod.crypto_box_PUBLICKEYBYTES),
+      sec: keys.bsk || Buffer.allocUnsafe(sod.crypto_box_SECRETKEYBYTES)
     }
-    sod.crypto_box_keypair(this.box.pub, this.box.sec)
+    if (!keys.bsk) sod.crypto_box_keypair(this.box.pub, this.box.sec)
+
     this.sig = {
-      pub: Buffer.allocUnsafe(sod.crypto_sign_PUBLICKEYBYTES),
-      sec: Buffer.allocUnsafe(sod.crypto_sign_SECRETKEYBYTES)
+      pub: keys.spk || Buffer.allocUnsafe(sod.crypto_sign_PUBLICKEYBYTES),
+      sec: keys.ssk || Buffer.allocUnsafe(sod.crypto_sign_SECRETKEYBYTES)
     }
-    sod.crypto_sign_keypair(this.sig.pub, this.sig.sec)
+    if (!keys.ssk) sod.crypto_sign_keypair(this.sig.pub, this.sig.sec)
   }
 
   static encode (id, b, o) {
@@ -297,12 +298,12 @@ module.exports.Identity = class Identity {
   static decode (buf, o, e) {
     if (typeof buf === 'string') buf = Buffer.from(buf, 'base64')
     const m = IdentityMessage.decode(buf, o, e)
-    const id = new Identity()
-    id.box.sec = m.box.sk
-    id.box.pub = m.box.pk
-    id.sig.sec = m.sig.sk
-    id.sig.pub = m.sig.pk
-    return id
+    return new Identity({
+      bpk: m.box.pk,
+      bsk: m.box.sk,
+      spk: m.sig.pk,
+      ssk: m.sig.sk
+    })
   }
 }
 
@@ -334,13 +335,17 @@ module.exports.Poll = class Poll extends PicoFeed {
     super(buf, { ...opts, contentEncoding: PollMessage })
   }
 
-  packChallenge (pkey, { motion, options, endsAt }) {
+  packChallenge (pkey, opts) {
+    const { motion, options, endsAt, version, motd, extra } = opts
     const msg = {
       challenge: {
+        version: version || 1,
         box_pk: pkey,
         motion,
         options,
-        ends_at: endsAt || new Date().getTime() + 86400000
+        ends_at: endsAt,
+        motd,
+        extra
       }
     }
     this.append(msg) // TODO: Should be this.set(0, msg)
@@ -396,12 +401,18 @@ module.exports.Poll = class Poll extends PicoFeed {
     return Util.decrypt(this.ballot.secret_vote, secret)
   }
 
+  get ballotKey () {
+    let p = 2
+    for (const key of this.keys) if (!--p) return key
+    return null
+  }
+
   toStatement (sk, pk) {
     const b0 = this.unboxBallot(sk, pk)
     const stmt = {
       vote: this._decryptVote(b0),
       // If voter chooses to reveal b0, the statement becomes de-anonymized
-      proof: Util.encrypt(this.ballot.box_pk, b0)
+      proof: Util.encrypt(this.ballotKey, b0)
     }
     return PollStatement.encode(stmt)
   }

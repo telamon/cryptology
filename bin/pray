@@ -1,0 +1,45 @@
+#!/usr/bin/env node
+
+const candidates = [
+  '0000',
+  'dev',
+  'void',
+  'abyss',
+  'entropy',
+  'null'
+].map(i => i.toLowerCase()
+  .replace(/o/i, '[o0]')
+  .replace(/t/, '[t7]')
+  .replace(/i/, '[i1]')
+)
+// console.log('Starting with candidates')
+// console.table(candidates)
+
+const s = require('sodium-universal')
+
+const rx = new RegExp(`^(${candidates.join('|')})`, 'i')
+let i = 0
+const start = new Date().getTime()
+const box = 1
+const pk = Buffer.allocUnsafe(box ? s.crypto_box_PUBLICKEYBYTES : s.crypto_sign_PUBLICKEYBYTES)
+const sk = Buffer.allocUnsafe(box ? s.crypto_box_SECRETKEYBYTES : s.crypto_sign_SECRETKEYBYTES)
+const roll = box ? s.crypto_box_keypair : s.crypto_sign_keypair
+while (true) {
+  ++i
+  roll(pk, sk)
+  // if (pk.toString('utf8').match(rx)) select(0, pk, sk)
+  const str = sk.toString('base64')
+  const strb = pk.toString('base64')
+  if (str.match(rx) && strb.match(rx)) select(pk, sk, str) && select(pk, sk, strb)
+}
+
+function select (pk, sk, str) {
+  const d = new Date().getTime() - start
+  const m = str.match(rx)
+  console.log(`Match: ${m[1].length} '` + str + '\'')
+  console.log('          ' + m[1].replace(/./g, '^'))
+  console.log('PK: ', pk.hexSlice())
+  console.log('SK: ', sk.hexSlice())
+  console.log(`HashRate: ${Math.round(i / d * 1000)}h/s, keys tested ${i}, ${d}secs run`)
+  console.log('~*~-_-~*~-_-~*~-_-~*~-_-~*~-_-~*~-_-~*~-_-~*~-_-')
+}

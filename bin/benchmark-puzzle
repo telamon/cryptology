@@ -1,4 +1,6 @@
-const { puzzleEncrypt, puzzleBreak } = require('.')
+#!/usr/bin/env node
+
+const { puzzleEncrypt, puzzleBreak } = require('..')
 console.time('generate')
 const puzzles = ['one', 'two', 'three', 'four', 'five']
   .map(m => Buffer.from(m))

@@ -20,17 +20,32 @@ message PollMessage {
   }
 }
 message PollChallenge {
-  required bytes box_pk = 1;
-  string motion = 2;
-  repeated string options = 3;
-  uint64 ends_at = 4;
+  required uint32 version = 1;
+  required bytes box_pk = 2;
+  string motion = 3; // (pro)motion
+  repeated string options = 4;
+  uint64 ends_at = 5;
+  string motd = 6; // might be deprecated
+  bytes extra = 7;
 }
+
+// Optional use.
+message PollIntBasicVote {
+  required int32 value = 1;
+  string pluscode = 2;
+}
+
 message PollBallot {
   required bytes box_msg = 1;
   required bytes secret_vote = 2;
   required bytes box_pk = 3;
+  // gotta think this through properly, not ready for use.
+  // uint32 gen = 4;
+  // bytes path = 5;
 }
 message PollStatement {
   required bytes vote = 1;
   required bytes proof = 2;
+  // uint32 gen = 3;
+  // bytes path = 4;
 }

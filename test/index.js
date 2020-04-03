@@ -10,7 +10,7 @@ const {
 
 test('summons an decentralized Identity', t => {
   const id = new Identity()
-  t.ok(id.master)
+  // t.ok(id.master) // Was moved to DerivedIdenty class
   t.ok(id.sig.pub)
   t.ok(id.sig.sec)
   t.ok(id.box.pub)
@@ -18,12 +18,12 @@ test('summons an decentralized Identity', t => {
   t.end()
 })
 
-test('summon password protected Identity')
+test('summon password protected Identity') // there will be a master key here
 
 // No you should use this algorithm in real world
 // scenarios, it has not been audited.
 // this is a toy democratic encryption scheme.
-test.only('Decentralized Poll agorithm', t => {
+test('Decentralized Poll agorithm', t => {
   const W = new Identity()
   const A = new Identity()
   const poll = new Poll(null, { secretKey: W.sig.sec })
@@ -33,7 +33,7 @@ test.only('Decentralized Poll agorithm', t => {
   })
   t.equal(poll.challenge.motion, 'How are you today?')
   t.equal(poll.challenge.options[0], 'Good')
-  t.ok(poll.challenge.ends_at)
+  // t.ok(poll.challenge.ends_at)
   const share = poll.pickle()
   // Alice found the vote
   const rpoll = new Poll(share) // replicated
@@ -48,11 +48,12 @@ test.only('Decentralized Poll agorithm', t => {
   t.equal(rpoll.length, 2, 'ballot added')
   t.ok(rpoll.ballot)
 
+  const aliceURL = rpoll.pickle()
   // Alice publishes her ballot
-  console.log('file://dev/null#' + rpoll.pickle())
+  console.log('file://dev/null#' + aliceURL)
 
   // Witness collects it
-  const wpoll = new Poll(rpoll.pickle())
+  const wpoll = new Poll(aliceURL)
 
   // Witness attempts to open the ballot
   // If b0 is not undefined, it means this ballot was addressed to us.
@@ -72,10 +73,24 @@ test.only('Decentralized Poll agorithm', t => {
   const statement = Poll.Statement.decode(bin)
   t.ok(aVote.equals(statement.vote))
   const p = decrypt(statement.proof, receipt)
-  t.ok(A.box.pub.equals(p))
+  t.ok(A.sig.pub.equals(p))
   // If alice's vote was recorded incorrectly,
   // at the cost of anonymity she can publish her receipt/b0
   // to prove that witness misbehaved having ignored her vote or manipulated it.
+
+  // trace viral path
+  /*
+   * Out of scope for alpha.
+  const B = new Identity() // Bob joins the fray!
+  const bpoll = new Poll(aliceURL)
+  // should see existing ballot.
+  t.ok(bpoll.ballotKey.equals(A.sig.pub))
+  t.equal(bpoll.ballotGen, 1)
+  t.equal(bpoll.ballotPath.equals(bpoll.key))
+
+  const bVote = Buffer.from([1])
+  const breceipt = rpoll.packVote(B, bVote)
+  debugger*/
   t.end()
 })
 
@@ -91,4 +106,3 @@ test('PuzzleBox', t => {
 
 test('construct lvl2 void cache')
 test('draw 4 layered seal containing a public secret')
-test('')

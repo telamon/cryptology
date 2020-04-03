@@ -45,6 +45,13 @@ var PollChallenge = exports.PollChallenge = {
   decode: null
 }
 
+var PollIntBasicVote = exports.PollIntBasicVote = {
+  buffer: true,
+  encodingLength: null,
+  encode: null,
+  decode: null
+}
+
 var PollBallot = exports.PollBallot = {
   buffer: true,
   encodingLength: null,
@@ -64,6 +71,7 @@ defineIdentityMessage()
 defineKeypair()
 definePollMessage()
 definePollChallenge()
+definePollIntBasicVote()
 definePollBallot()
 definePollStatement()
 
@@ -377,6 +385,9 @@ function definePollChallenge () {
 
   function encodingLength (obj) {
     var length = 0
+    if (!defined(obj.version)) throw new Error("version is required")
+    var len = encodings.varint.encodingLength(obj.version)
+    length += 1 + len
     if (!defined(obj.box_pk)) throw new Error("box_pk is required")
     var len = encodings.bytes.encodingLength(obj.box_pk)
     length += 1 + len
@@ -395,6 +406,14 @@ function definePollChallenge () {
       var len = encodings.varint.encodingLength(obj.ends_at)
       length += 1 + len
     }
+    if (defined(obj.motd)) {
+      var len = encodings.string.encodingLength(obj.motd)
+      length += 1 + len
+    }
+    if (defined(obj.extra)) {
+      var len = encodings.bytes.encodingLength(obj.extra)
+      length += 1 + len
+    }
     return length
   }
 
@@ -402,27 +421,41 @@ function definePollChallenge () {
     if (!offset) offset = 0
     if (!buf) buf = Buffer.allocUnsafe(encodingLength(obj))
     var oldOffset = offset
+    if (!defined(obj.version)) throw new Error("version is required")
+    buf[offset++] = 8
+    encodings.varint.encode(obj.version, buf, offset)
+    offset += encodings.varint.encode.bytes
     if (!defined(obj.box_pk)) throw new Error("box_pk is required")
-    buf[offset++] = 10
+    buf[offset++] = 18
     encodings.bytes.encode(obj.box_pk, buf, offset)
     offset += encodings.bytes.encode.bytes
     if (defined(obj.motion)) {
-      buf[offset++] = 18
+      buf[offset++] = 26
       encodings.string.encode(obj.motion, buf, offset)
       offset += encodings.string.encode.bytes
     }
     if (defined(obj.options)) {
       for (var i = 0; i < obj.options.length; i++) {
         if (!defined(obj.options[i])) continue
-        buf[offset++] = 26
+        buf[offset++] = 34
         encodings.string.encode(obj.options[i], buf, offset)
         offset += encodings.string.encode.bytes
       }
     }
     if (defined(obj.ends_at)) {
-      buf[offset++] = 32
+      buf[offset++] = 40
       encodings.varint.encode(obj.ends_at, buf, offset)
       offset += encodings.varint.encode.bytes
+    }
+    if (defined(obj.motd)) {
+      buf[offset++] = 50
+      encodings.string.encode(obj.motd, buf, offset)
+      offset += encodings.string.encode.bytes
+    }
+    if (defined(obj.extra)) {
+      buf[offset++] = 58
+      encodings.bytes.encode(obj.extra, buf, offset)
+      offset += encodings.bytes.encode.bytes
     }
     encode.bytes = offset - oldOffset
     return buf
@@ -434,10 +467,105 @@ function definePollChallenge () {
     if (!(end <= buf.length && offset <= buf.length)) throw new Error("Decoded message is not valid")
     var oldOffset = offset
     var obj = {
+      version: 0,
       box_pk: null,
       motion: "",
       options: [],
-      ends_at: 0
+      ends_at: 0,
+      motd: "",
+      extra: null
+    }
+    var found0 = false
+    var found1 = false
+    while (true) {
+      if (end <= offset) {
+        if (!found0 || !found1) throw new Error("Decoded message is not valid")
+        decode.bytes = offset - oldOffset
+        return obj
+      }
+      var prefix = varint.decode(buf, offset)
+      offset += varint.decode.bytes
+      var tag = prefix >> 3
+      switch (tag) {
+        case 1:
+        obj.version = encodings.varint.decode(buf, offset)
+        offset += encodings.varint.decode.bytes
+        found0 = true
+        break
+        case 2:
+        obj.box_pk = encodings.bytes.decode(buf, offset)
+        offset += encodings.bytes.decode.bytes
+        found1 = true
+        break
+        case 3:
+        obj.motion = encodings.string.decode(buf, offset)
+        offset += encodings.string.decode.bytes
+        break
+        case 4:
+        obj.options.push(encodings.string.decode(buf, offset))
+        offset += encodings.string.decode.bytes
+        break
+        case 5:
+        obj.ends_at = encodings.varint.decode(buf, offset)
+        offset += encodings.varint.decode.bytes
+        break
+        case 6:
+        obj.motd = encodings.string.decode(buf, offset)
+        offset += encodings.string.decode.bytes
+        break
+        case 7:
+        obj.extra = encodings.bytes.decode(buf, offset)
+        offset += encodings.bytes.decode.bytes
+        break
+        default:
+        offset = skip(prefix & 7, buf, offset)
+      }
+    }
+  }
+}
+
+function definePollIntBasicVote () {
+  PollIntBasicVote.encodingLength = encodingLength
+  PollIntBasicVote.encode = encode
+  PollIntBasicVote.decode = decode
+
+  function encodingLength (obj) {
+    var length = 0
+    if (!defined(obj.value)) throw new Error("value is required")
+    var len = encodings.int32.encodingLength(obj.value)
+    length += 1 + len
+    if (defined(obj.pluscode)) {
+      var len = encodings.string.encodingLength(obj.pluscode)
+      length += 1 + len
+    }
+    return length
+  }
+
+  function encode (obj, buf, offset) {
+    if (!offset) offset = 0
+    if (!buf) buf = Buffer.allocUnsafe(encodingLength(obj))
+    var oldOffset = offset
+    if (!defined(obj.value)) throw new Error("value is required")
+    buf[offset++] = 8
+    encodings.int32.encode(obj.value, buf, offset)
+    offset += encodings.int32.encode.bytes
+    if (defined(obj.pluscode)) {
+      buf[offset++] = 18
+      encodings.string.encode(obj.pluscode, buf, offset)
+      offset += encodings.string.encode.bytes
+    }
+    encode.bytes = offset - oldOffset
+    return buf
+  }
+
+  function decode (buf, offset, end) {
+    if (!offset) offset = 0
+    if (!end) end = buf.length
+    if (!(end <= buf.length && offset <= buf.length)) throw new Error("Decoded message is not valid")
+    var oldOffset = offset
+    var obj = {
+      value: 0,
+      pluscode: ""
     }
     var found0 = false
     while (true) {
@@ -451,21 +579,13 @@ function definePollChallenge () {
       var tag = prefix >> 3
       switch (tag) {
         case 1:
-        obj.box_pk = encodings.bytes.decode(buf, offset)
-        offset += encodings.bytes.decode.bytes
+        obj.value = encodings.int32.decode(buf, offset)
+        offset += encodings.int32.decode.bytes
         found0 = true
         break
         case 2:
-        obj.motion = encodings.string.decode(buf, offset)
+        obj.pluscode = encodings.string.decode(buf, offset)
         offset += encodings.string.decode.bytes
-        break
-        case 3:
-        obj.options.push(encodings.string.decode(buf, offset))
-        offset += encodings.string.decode.bytes
-        break
-        case 4:
-        obj.ends_at = encodings.varint.decode(buf, offset)
-        offset += encodings.varint.decode.bytes
         break
         default:
         offset = skip(prefix & 7, buf, offset)
