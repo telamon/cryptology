@@ -1,0 +1,36 @@
+#!/usr/bin/env node
+const { readFileSync } = require('fs')
+const { join } = require('path')
+const { Poll, Identity } = require('..')
+
+const { ssk, spk } = JSON.parse(readFileSync(join(process.cwd(), '..', 'identity.json')).toString('utf8'))
+
+const id = new Identity({
+  // skeleton keys go here
+  bpk: Buffer.from('bf4883db882d83fa1fa312c05adb35faea44a979ad09ef996272ae127b05a62a', 'hex'),
+  bsk: Buffer.from('7a25c1bfe0d4cfa1c4374e91a545d99ed61ecefcba71cfbfe9c7891fc98cee4f', 'hex'),
+
+  // Theese are mine.
+  spk: Buffer.from(spk, 'hex'),
+  ssk: Buffer.from(ssk, 'hex')
+})
+
+const poll = new Poll(null, { secretKey: id.sig.sec })
+poll.packChallenge(id.box.pub, {
+  version: new Date().getTime(),
+  // motion: 'We\'re doing science!',
+  motd: 'Hello World! How are you doing?'
+})
+
+console.log('Here\'s your pico feed:')
+console.log(poll.pickle())
+
+console.log('\nskeleton keys:')
+const strpk = id.box.pub.toString('base64').replace(/=+$/, '')
+const strsk = id.box.sec.toString('base64').replace(/=+$/, '')
+if (!Buffer.from(strpk, 'base64').equals(id.box.pub)) throw new Error('mismatch')
+if (!Buffer.from(strsk, 'base64').equals(id.box.sec)) throw new Error('mismatch')
+
+console.log(strpk)
+console.log(strsk)
+

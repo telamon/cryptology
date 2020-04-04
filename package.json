@@ -13,8 +13,8 @@
     "debug": "node inspect $(npm bin)/tape test/*.js",
     "lint": "standard",
     "protobuf": "protocol-buffers -o messages.js schema.proto",
-    "build": "browserify index.js > bundle.js",
-    "build-dist": "browserify -p tinyify index.js > bundle.js",
+    "build": "browserify index.js > cryptology.js",
+    "build-dist": "browserify -p tinyify index.js > cryptology.min.js",
     "prepublishOnly": "npm test"
   },
   "dependencies": {

@@ -420,8 +420,9 @@ module.exports.Poll = class Poll extends PicoFeed {
 // Export for external use.
 module.exports.Poll.Statement = PollStatement
 module.exports.VoteMsg = VoteMsg
-// fkc,
-module.exports.sod = sod
+module.exports.Buffer = Buffer
+module.exports.sodium = sod
+
 if (typeof window !== 'undefined') {
   window.Cryptology = module.exports
 }

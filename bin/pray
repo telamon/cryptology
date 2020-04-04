@@ -5,6 +5,7 @@ const candidates = [
   'dev',
   'void',
   'abyss',
+  'secret',
   'entropy',
   'null'
 ].map(i => i.toLowerCase()
