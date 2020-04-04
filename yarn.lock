@@ -2244,10 +2244,10 @@ pbkdf2@^3.0.3:
     safe-buffer "^5.0.1"
     sha.js "^2.4.8"
 
-picofeed@^0.0.1:
-  version "0.0.1"
-  resolved "https://registry.yarnpkg.com/picofeed/-/picofeed-0.0.1.tgz#a50394cca24f787cd8ca8f6cfbea69aa6819791c"
-  integrity sha512-x0ZcursuF7gsbP5xoz1WiM+qKhtDq5qxF3EfrMFdB/dAhwmPd2/LI2pvn3P0r3cvhQMiINwGzh8ZY5XTm6gMwg==
+picofeed@^1.1.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/picofeed/-/picofeed-1.1.0.tgz#67303bd4c9009259b94db588d981b27aba4eba92"
+  integrity sha512-KLJ3ZeWgnVw+GxZg4bLbhygqEM3mQ5g6EAWZzbgJ+nO3uLRM+hAZp28h6qUNYiElrUG1xyJhfDNtcMzALPbjlw==
   dependencies:
     codecs "^2.0.0"
     sodium-universal "^2.0.0"
