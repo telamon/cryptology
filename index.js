@@ -30,6 +30,10 @@ const {
   crypto_box_easy,
   crypto_box_open_easy,
 
+  crypto_box_SEALBYTES,
+  crypto_box_seal,
+  crypto_box_seal_open,
+
   crypto_secretbox_MACBYTES,
   crypto_secretbox_NONCEBYTES,
   crypto_secretbox_KEYBYTES,
