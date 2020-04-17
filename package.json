@@ -20,6 +20,7 @@
   "dependencies": {
     "picofeed": "^1.1.0",
     "protocol-buffers-encodings": "^1.1.0",
+    "scrypt-js": "^3.0.0",
     "sodium-universal": "^2.0.0"
   },
   "devDependencies": {
