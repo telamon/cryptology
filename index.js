@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 const { PollMessage, PollStatement, IdentityMessage, VoteMsg } = require('./messages')
 const PicoFeed = require('picofeed')
-const { scrypt } = require('scrypt-js')
+const { scrypt, syncScrypt } = require('scrypt-js')
 /* eslint-disable camelcase */
 const {
   crypto_kdf_CONTEXTBYTES,
@@ -14,7 +14,7 @@ const {
   crypto_sign_SEEDBYTES,
   crypto_sign_BYTES,
   crypto_sign_seed_keypair,
-  crypto_sign_keypair,
+  // crypto_sign_keypair,
   crypto_sign,
   crypto_sign_open,
   crypto_sign_detached,
@@ -48,7 +48,6 @@ const {
 
   randombytes_buf
 } = require('sodium-universal')
-
 const Util = module.exports
 
 module.exports.deriveSubkey = function (master, n, context = '__undef__', id = 0) {
@@ -184,10 +183,12 @@ module.exports.verifyDetached = function (message, signature, publicKey) {
 
 module.exports.puzzleEncrypt = function (data, difficulty = 1) {
   if (difficulty > 3) throw new Error('Please mind the environment')
+  const crypto_pwhash_SALTBYTES = 8
   const cipher = Buffer.allocUnsafe(data.length +
     crypto_secretbox_MACBYTES +
     crypto_secretbox_NONCEBYTES +
     crypto_pwhash_SALTBYTES)
+
   const salt = cipher.subarray(0, crypto_pwhash_SALTBYTES)
   const nonce = cipher.subarray(crypto_pwhash_SALTBYTES,
     crypto_pwhash_SALTBYTES + crypto_secretbox_NONCEBYTES)
@@ -197,11 +198,11 @@ module.exports.puzzleEncrypt = function (data, difficulty = 1) {
   randombytes_buf(pw)
 
   const secret = Buffer.allocUnsafe(crypto_secretbox_KEYBYTES)
-
   crypto_pwhash(secret, pw, salt,
     crypto_pwhash_OPSLIMIT_INTERACTIVE,
     crypto_pwhash_MEMLIMIT_INTERACTIVE,
     crypto_pwhash_ALG_DEFAULT)
+
 
   crypto_secretbox_easy(
     cipher.subarray(crypto_pwhash_SALTBYTES + crypto_secretbox_NONCEBYTES),
@@ -246,7 +247,10 @@ module.exports.puzzleBreak = function (comb, difficulty = 1, _knownKey = null) {
       nonce,
       secret
     )
-    if (_knownKey) return success ? message : undefined
+    if (_knownKey) {
+      if (success) return { data: message }
+      else throw new Error('DecryptionFailedError')
+    }
   }
   return { pw, data: message }
 }
@@ -297,39 +301,11 @@ module.exports.scrypt = function (passphrase, salt, n = 2048, r = 8, p = 1, dkLe
   return scrypt(passphrase, passphrase, n, r, p, dkLen)
 }
 
-module.exports.Identity = class Identity {
-  constructor (keys = {}) {
-    this.box = {
-      pub: keys.bpk || Buffer.allocUnsafe(crypto_box_PUBLICKEYBYTES),
-      sec: keys.bsk || Buffer.allocUnsafe(crypto_box_SECRETKEYBYTES)
-    }
-    if (!keys.bsk) crypto_box_keypair(this.box.pub, this.box.sec)
-
-    this.sig = {
-      pub: keys.spk || Buffer.allocUnsafe(crypto_sign_PUBLICKEYBYTES),
-      sec: keys.ssk || Buffer.allocUnsafe(crypto_sign_SECRETKEYBYTES)
-    }
-    if (!keys.ssk) crypto_sign_keypair(this.sig.pub, this.sig.sec)
-  }
-
-  static encode (id, b, o) {
-    const m = {
-      box: { sk: id.box.sec, pk: id.box.pub },
-      sig: { sk: id.sig.sec, pk: id.sig.pub }
-    }
-    return IdentityMessage.encode(m, b, o).toString('base64')
-  }
-
-  static decode (buf, o, e) {
-    if (typeof buf === 'string') buf = Buffer.from(buf, 'base64')
-    const m = IdentityMessage.decode(buf, o, e)
-    return new Identity({
-      bpk: m.box.pk,
-      bsk: m.box.sk,
-      spk: m.sig.pk,
-      ssk: m.sig.sk
-    })
-  }
+module.exports.boxPair = function () {
+  const pk = Buffer.allocUnsafe(crypto_box_PUBLICKEYBYTES)
+  const sk = Buffer.allocUnsafe(crypto_box_SECRETKEYBYTES)
+  crypto_box_keypair(pk, sk)
+  return { pk, sk }
 }
 
 /* Work in progress.
